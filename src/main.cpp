@@ -4,6 +4,7 @@
 #include <can_regdef.h>
 #include <WiFi.h>
 #include <WiFiAP.h>
+#include <WebServer.h>
 
 const char* ssid     = "ESP32-CAN";
 const char* password = "123456789";
@@ -11,6 +12,8 @@ const char* password = "123456789";
 char * udpAddress = "192.168.4.2";
 int udpPort = 3333;
 char incomingPacket[255];  // buffer for incoming packets
+
+WebServer server(80);
 
 WiFiUDP udp;
 
