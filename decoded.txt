@@ -1,0 +1,108 @@
+02818100 - odomknutie vsetky okrem LP
+02811500 - zamknutie vsetky okrem LP
+
+02b11500 - zamknutie vsetky okrem PP
+02b18100 - zamknutie vsetky okrem PP
+
+02810502 - zamknutie prave
+02810501 - odomknutie prave
+
+0501 8400 - prave zkadlo od karoserie
+0501 4800 - prave zkadlo ku karoserii
+0501 1100 - prave zkadlo dohora
+0501 2200 - prave zkadlo dohora
+
+obe zrkadla hore:
+0501 1100
+0601 11
+....
+0501 0000
+0601 10
+
+obe zrkadla dole:
+0501 2200
+0601 12
+....
+0501 0000
+0601 10
+
+
+prave dole:
+0501 2000
+0601 22
+....
+0501 0000
+0601 20
+
+
+zamkni vsetko tlacitkom:
+
+0381 400c018c00 - obezadne a kufor
+0293 1201 - status?//
+0591 07010b - ???
+0281 0502 - zamkni prave predne
+0381 420c018c00
+0293 0201 - ???
+03b5 8200008c00 - ????
+0381 020c018c00 - ????
+0281 0500
+0281 0200
+02b1 0200
+
+
+
+
+02b1 0502 - zamkni lave predne
+
+
+
+odomkni vsetko tlacitkom:
+
+0381 220c018c00 - obezadne a kufor
+0293 0501 - ????
+0591 07000b - ???
+0281 0201 - odomk prave predne
+0293 1501 - status?
+0381 200c018c00
+03b5 8000008c00
+0381 000c018c00
+0281 0200
+0281 0500
+02b1 0500
+
+
+02b10201 - odomk lave predne
+
+
+
+odomkni vvsetko klucom:
+
+0402 020200080300
+03b5 0600008c00
+0403 030280000300
+0381 0e0c018c00
+0401 010280000000
+0403 080100000000
+0621 00445c
+0293 1501
+0408 021100000000
+0401 020200000000
+0281 8100
+03b5 8200008c00
+0402 030100000000
+0591 04000b
+0408 011100000000
+0401 020100000000
+0381 0a0c018c00
+0293 0501
+0281 0100
+0381 020c018c00
+0391 000000
+0621 00455c
+0293 1501
+0381 000c018c00
+03b5 8000008c00
+0401 021100000000
+0281 0500
+02b1 0500
+
