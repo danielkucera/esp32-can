@@ -22,6 +22,52 @@ unsigned long previousMillis = 0;   // will store last time a CAN Message was se
 const int interval = 1000;          // interval at which send CAN Messages (milliseconds)
 const int rx_queue_size = 10;       // Receive Queue size
 
+void handleNotFound() {
+  String message = "<html>"
+  "<!DOCTYPE html><html>"
+  "<head><meta name=\"viewport\" content=\"width=device-width, initial-scale=1\">"
+  "<link rel=\"icon\" href=\"data:,\">"
+  "<style>html { font-family: Helvetica; display: inline-block; margin: 0px auto; text-align: center;}"
+  ".button { background-color: #AA0000; border: none; color: white; padding: 16px 40px;"
+  "text-decoration: none; font-size: 30px; margin: 2px; cursor: pointer;}"
+  ".button2 {background-color: #4CAF50;}</style></head>"
+  "<body><h1>ESP32-CAN</h1>"
+  "<p><a href=\"/lock\"><button class=\"button\">LOCK</button></a></p>"
+  "<p><a href=\"/unlock\"><button class=\"button button2\">UNLOCK</button></a></p>";
+
+  server.send(200, "text/html", message);
+}
+
+void send_frame(int id, String data){
+  CAN_frame_t tx_frame;
+  uint8_t len = (uint8_t)(data.length());
+  tx_frame.FIR.B.FF = CAN_frame_std;
+  tx_frame.MsgID = id;
+  tx_frame.FIR.B.DLC = len;
+
+  for (int i=0; i<len; i++){
+    tx_frame.data.u8[i] = data[i];
+  }
+
+  ESP32Can.CANWriteFrame(&tx_frame);
+}
+
+void unlock() {
+  printf("unlocking\n");
+  send_frame(0x0281, "\x81\x00");
+  send_frame(0x02b1, "\x81\x00");
+  server.sendHeader("Location", "/");
+  server.send(307);
+}
+
+void lock() {
+  printf("locking\n");
+  send_frame(0x0281, "\x15\x00");
+  send_frame(0x02b1, "\x15\x00");
+  server.sendHeader("Location", "/");
+  server.send(307);
+}
+
 void setup() {
   Serial.begin(115200);
   Serial.println("Basic Demo - ESP32-Arduino-CAN");
@@ -43,6 +89,12 @@ void setup() {
   CAN_cfg.rx_queue = xQueueCreate(rx_queue_size, sizeof(CAN_frame_t));
   // Init CAN Module
   ESP32Can.CANInit();
+
+  server.onNotFound(handleNotFound);
+  server.on("/lock", lock);
+  server.on("/unlock", unlock);
+
+  server.begin();
 }
 
 unsigned long lastMillis = 0;
@@ -53,6 +105,8 @@ void loop() {
   CAN_frame_t rx_frame;
 
   unsigned long currentMillis = millis();
+
+  server.handleClient();
 
   // Receive next CAN frame from queue
   while (xQueueReceive(CAN_cfg.rx_queue, &rx_frame, 3 * portTICK_PERIOD_MS) == pdTRUE) {
