@@ -2,6 +2,17 @@
 #include <ESP32CAN.h>
 #include <CAN_config.h>
 #include <can_regdef.h>
+#include <WiFi.h>
+#include <WiFiAP.h>
+
+const char* ssid     = "ESP32-CAN";
+const char* password = "123456789";
+
+char * udpAddress = "192.168.4.2";
+int udpPort = 3333;
+char incomingPacket[255];  // buffer for incoming packets
+
+WiFiUDP udp;
 
 CAN_device_t CAN_cfg;               // CAN Config
 unsigned long previousMillis = 0;   // will store last time a CAN Message was send
@@ -11,6 +22,16 @@ const int rx_queue_size = 10;       // Receive Queue size
 void setup() {
   Serial.begin(115200);
   Serial.println("Basic Demo - ESP32-Arduino-CAN");
+
+  WiFi.softAP(ssid, password);
+  Serial.print("AP IP address: ");
+
+  IPAddress IP = WiFi.softAPIP();
+
+  Serial.println(IP);
+
+  udp.begin(IP,udpPort);
+
   //CAN_cfg.speed = CAN_SPEED_125KBPS;
   CAN_cfg.speed = CAN_SPEED_100KBPS;
   //CAN_cfg.speed = (CAN_speed_t)62;
@@ -44,34 +65,39 @@ void loop() {
       printf(" RTR from 0x%08X, DLC %d\r\n", rx_frame.MsgID,  rx_frame.FIR.B.DLC);
     }
     else {
+      udp.beginPacket(udpAddress,udpPort);
+      udp.write(rx_frame.MsgID/256);
+      udp.write(rx_frame.MsgID%256);
       printf("0x%08X ", rx_frame.MsgID);
       for (int i = 0; i < rx_frame.FIR.B.DLC; i++) {
         printf("%02X", rx_frame.data.u8[i]);
+        udp.write(rx_frame.data.u8[i]);
       }
       printf("\n");
+      udp.endPacket();
     }
   }
 
-  if (doSend){
-    printf("sending\n");
-    // Send CAN Message
-    if (currentMillis - previousMillis >= interval) {
-      previousMillis = currentMillis;
+  int packetSize = udp.parsePacket();
+  if (packetSize){
+    udpPort = udp.remotePort();
+    int len = udp.read(incomingPacket, packetSize);
+    if (len > 0)
+    {
+      printf("sending\n");
+
+      // Send CAN Message
       CAN_frame_t tx_frame;
       tx_frame.FIR.B.FF = CAN_frame_std;
-      tx_frame.MsgID = 0x001;
-      tx_frame.FIR.B.DLC = 8;
-      tx_frame.data.u8[0] = 0x00;
-      tx_frame.data.u8[1] = 0x01;
-      tx_frame.data.u8[2] = 0x02;
-      tx_frame.data.u8[3] = 0x03;
-      tx_frame.data.u8[4] = 0x04;
-      tx_frame.data.u8[5] = 0x05;
-      tx_frame.data.u8[6] = 0x06;
-      tx_frame.data.u8[7] = 0x07;
+      tx_frame.MsgID = incomingPacket[0]*256 + incomingPacket[1];
+      tx_frame.FIR.B.DLC = len-2;
+
+      for (int i=0; i<len-2; i++){
+        tx_frame.data.u8[i] = incomingPacket[i+2];
+      }
+
       ESP32Can.CANWriteFrame(&tx_frame);
     }
-    doSend = 0;
   }
 
   if (lastMillis + 1000 < currentMillis) {
