@@ -52,18 +52,44 @@ void send_frame(int id, String data){
   ESP32Can.CANWriteFrame(&tx_frame);
 }
 
-void unlock() {
-  printf("unlocking\n");
+void unlock_send(void * parameter){
+  send_frame(0x0281, "\x81\x00");
+  delay(500);
   send_frame(0x0281, "\x81\x00");
   send_frame(0x02b1, "\x81\x00");
+  send_frame(0x0381, "\x22\x0c\x01\x8c\x00");
+}
+
+void unlock() {
+  printf("unlocking\n");
+  xTaskCreate(
+                unlock_send,          /* Task function. */
+                "unlock_send",        /* String with name of task. */
+                10000,            /* Stack size in bytes. */
+                NULL,             /* Parameter passed as input of the task */
+                1,                /* Priority of the task. */
+                NULL);            /* Task handle. */
   server.sendHeader("Location", "/");
   server.send(307);
 }
 
-void lock() {
-  printf("locking\n");
+void lock_send(void * parameter){
+  send_frame(0x0281, "\x15\x00");
+  delay(500);
   send_frame(0x0281, "\x15\x00");
   send_frame(0x02b1, "\x15\x00");
+  send_frame(0x0381, "\x40\x0c\x01\x8c\x00");
+}
+
+void lock() {
+  printf("locking\n");
+  xTaskCreate(
+                  lock_send,          /* Task function. */
+                  "lock_send",        /* String with name of task. */
+                  10000,            /* Stack size in bytes. */
+                  NULL,             /* Parameter passed as input of the task */
+                  1,                /* Priority of the task. */
+                  NULL);            /* Task handle. */
   server.sendHeader("Location", "/");
   server.send(307);
 }
