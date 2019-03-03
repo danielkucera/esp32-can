@@ -56,6 +56,7 @@ void unlock() {
   printf("unlocking\n");
   send_frame(0x0281, "\x81\x00");
   send_frame(0x02b1, "\x81\x00");
+  send_frame(0x0381, "\x22\x0c\x01\x8c\x00");
   server.sendHeader("Location", "/");
   server.send(307);
 }
@@ -64,6 +65,7 @@ void lock() {
   printf("locking\n");
   send_frame(0x0281, "\x15\x00");
   send_frame(0x02b1, "\x15\x00");
+  send_frame(0x0381, "\x40\x0c\x01\x8c\x00");
   server.sendHeader("Location", "/");
   server.send(307);
 }
