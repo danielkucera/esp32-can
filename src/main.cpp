@@ -32,9 +32,7 @@ void setup() {
 
   udp.begin(IP,udpPort);
 
-  //CAN_cfg.speed = CAN_SPEED_125KBPS;
-  CAN_cfg.speed = CAN_SPEED_100KBPS;
-  //CAN_cfg.speed = (CAN_speed_t)62;
+  CAN_cfg.speed = CAN_SPEED_500KBPS;
   CAN_cfg.tx_pin_id = GPIO_NUM_23;
   CAN_cfg.rx_pin_id = GPIO_NUM_22;
   CAN_cfg.rx_queue = xQueueCreate(rx_queue_size, sizeof(CAN_frame_t));
@@ -53,29 +51,13 @@ void loop() {
 
   // Receive next CAN frame from queue
   while (xQueueReceive(CAN_cfg.rx_queue, &rx_frame, 3 * portTICK_PERIOD_MS) == pdTRUE) {
-
-    if (rx_frame.FIR.B.FF == CAN_frame_std) {
-      printf("s");
+    udp.beginPacket(udpAddress,udpPort);
+    udp.write(rx_frame.MsgID/256);
+    udp.write(rx_frame.MsgID%256);
+    for (int i = 0; i < rx_frame.FIR.B.DLC; i++) {
+      udp.write(rx_frame.data.u8[i]);
     }
-    else {
-      printf("e");
-    }
-
-    if (rx_frame.FIR.B.RTR == CAN_RTR) {
-      printf(" RTR from 0x%08X, DLC %d\r\n", rx_frame.MsgID,  rx_frame.FIR.B.DLC);
-    }
-    else {
-      udp.beginPacket(udpAddress,udpPort);
-      udp.write(rx_frame.MsgID/256);
-      udp.write(rx_frame.MsgID%256);
-      printf("0x%08X ", rx_frame.MsgID);
-      for (int i = 0; i < rx_frame.FIR.B.DLC; i++) {
-        printf("%02X", rx_frame.data.u8[i]);
-        udp.write(rx_frame.data.u8[i]);
-      }
-      printf("\n");
-      udp.endPacket();
-    }
+    udp.endPacket();
   }
 
   int packetSize = udp.parsePacket();
@@ -84,8 +66,6 @@ void loop() {
     int len = udp.read(incomingPacket, packetSize);
     if (len > 0)
     {
-      printf("sending\n");
-
       // Send CAN Message
       CAN_frame_t tx_frame;
       tx_frame.FIR.B.FF = CAN_frame_std;

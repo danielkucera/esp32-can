@@ -3,6 +3,7 @@
 import socket
 import sys
 import time
+import os
 
 UDP_IP = "192.168.4.1"
 UDP_PORT = 3333
@@ -19,9 +20,10 @@ sock = socket.socket(socket.AF_INET, # Internet
 sock.bind(("0.0.0.0", UDP_PORT))
 
 def regdump():
-    print "\n\n\n\n\n\n\n\n\n\n"
+    os.system("clear")
     for key in regs:
         print key.encode("hex"), regs[key].encode("hex")
+    #time.sleep(0.1)
 
 if len(sys.argv) > 1:
     MESSAGE = sys.argv[1].decode("hex")
@@ -35,9 +37,9 @@ while True:
     payl = data[2:]
     if addr in regs and regs[addr] != payl:
         regs[addr] = payl
-        #regdump()
-        if addr not in [ '\x01\x51', '\x06\x23' ]:
-            print addr.encode("hex"), payl.encode("hex")
+        regdump()
+#        if addr not in [ '\x01\x51', '\x06\x23' ]:
+#            print addr.encode("hex"), payl.encode("hex")
     regs[addr] = payl
 
     #print addr.encode("hex"), payl.encode("hex")
