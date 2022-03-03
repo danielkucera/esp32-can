@@ -8,16 +8,39 @@
 const char* ssid     = "ESP32-CAN";
 const char* password = "123456789";
 
-char * udpAddress = "192.168.4.2";
-int udpPort = 3333;
 char incomingPacket[255];  // buffer for incoming packets
 
-WiFiUDP udp;
+WiFiServer server(3333);
+WiFiClient client;
 
 CAN_device_t CAN_cfg;               // CAN Config
 unsigned long previousMillis = 0;   // will store last time a CAN Message was send
 const int interval = 1000;          // interval at which send CAN Messages (milliseconds)
-const int rx_queue_size = 10;       // Receive Queue size
+const int rx_queue_size = 500;       // Receive Queue size
+
+pthread_t readThread;
+int msg_count = 0;
+
+#define TCP_MSG_CNT 10              //number of messages to queue per write
+
+void *readFunction(void* p){
+  CAN_frame_t rx_frame[TCP_MSG_CNT];
+
+  while (true){
+    // Receive next CAN frame from queue
+    for (int i=0; i<10; ){
+      if (xQueueReceive(CAN_cfg.rx_queue, &(rx_frame[i]), 3 * portTICK_PERIOD_MS) == pdTRUE) {
+        msg_count++;
+        i++;
+      }
+    }
+
+    if (client){
+      client.write((u_char*)(&rx_frame), TCP_MSG_CNT*sizeof(CAN_frame_t));
+    }
+
+  }
+}
 
 void setup() {
   Serial.begin(115200);
@@ -30,7 +53,7 @@ void setup() {
 
   Serial.println(IP);
 
-  udp.begin(IP,udpPort);
+  server.begin();
 
   CAN_cfg.speed = CAN_SPEED_500KBPS;
   CAN_cfg.tx_pin_id = GPIO_NUM_23;
@@ -38,51 +61,45 @@ void setup() {
   CAN_cfg.rx_queue = xQueueCreate(rx_queue_size, sizeof(CAN_frame_t));
   // Init CAN Module
   ESP32Can.CANInit();
-}
 
-unsigned long lastMillis = 0;
-int doSend = 0;
+  pthread_create(&readThread, NULL, readFunction, NULL);
+}
 
 void loop() {
 
-  CAN_frame_t rx_frame;
-
-  unsigned long currentMillis = millis();
-
-  // Receive next CAN frame from queue
-  while (xQueueReceive(CAN_cfg.rx_queue, &rx_frame, 3 * portTICK_PERIOD_MS) == pdTRUE) {
-    udp.beginPacket(udpAddress,udpPort);
-    udp.write(rx_frame.MsgID/256);
-    udp.write(rx_frame.MsgID%256);
-    for (int i = 0; i < rx_frame.FIR.B.DLC; i++) {
-      udp.write(rx_frame.data.u8[i]);
-    }
-    udp.endPacket();
+  // accept new client
+  if (server.hasClient()) {
+    client = server.available();
+    printf("TCP client connected: %s\n", client.remoteIP().toString().c_str());
   }
 
-  int packetSize = udp.parsePacket();
-  if (packetSize){
-    udpPort = udp.remotePort();
-    int len = udp.read(incomingPacket, packetSize);
-    if (len > 0)
-    {
+  if (client){
+    if (client.available()){
+      int dataLen = client.read();
+
+      byte idHigh = client.read();
+      byte idLow = client.read();
+
       // Send CAN Message
       CAN_frame_t tx_frame;
       tx_frame.FIR.B.FF = CAN_frame_std;
-      tx_frame.MsgID = incomingPacket[0]*256 + incomingPacket[1];
-      tx_frame.FIR.B.DLC = len-2;
+      tx_frame.MsgID = idHigh*256 + idLow;
+      tx_frame.FIR.B.DLC = dataLen;
 
-      for (int i=0; i<len-2; i++){
-        tx_frame.data.u8[i] = incomingPacket[i+2];
+      for (int i=0; i<dataLen; i++){
+        tx_frame.data.u8[i] = client.read();
       }
 
       ESP32Can.CANWriteFrame(&tx_frame);
     }
   }
 
+  static unsigned long lastMillis = 0;
+  unsigned long currentMillis = millis();
+
   if (lastMillis + 1000 < currentMillis) {
     lastMillis = currentMillis;
-    printf("loop time:%d txerr:%d \n", (int)currentMillis, MODULE_CAN->TXERR.U);
-    doSend = 0;
+    printf("loop time:%d rcvd: %d, txerr:%d \n", (int)currentMillis, msg_count, MODULE_CAN->TXERR.U);
+    msg_count = 0;
   }
 }
