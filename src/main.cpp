@@ -13,12 +13,16 @@ pthread_t readThread;
 pthread_t statsThread;
 int msg_count = 0;
 
+int status_sent = 0;
+bool status_trigger = 0;
+
 #define TCP_MSG_CNT 50              //number of messages to queue per write
 CAN_frame_t rx_frame[TCP_MSG_CNT];
+CAN_frame_t tx_frame[TCP_MSG_CNT];
 unsigned char base64[(TCP_MSG_CNT*16*4)/3+3];
 
 void report_stats(){
-  printf("loop time:%ld rcvd: %d, txerr:%d rx_overrun:%d \n", millis(), msg_count, MODULE_CAN->TXERR.U, ESP32Can.CANOverrunCounter());
+  printf("loop time:%ld rcvd: %d, txerr:%d rx_overrun:%d status_sent:%d \n", millis(), msg_count, MODULE_CAN->TXERR.U, ESP32Can.CANOverrunCounter(), status_sent);
   msg_count = 0;
 }
 
@@ -125,6 +129,57 @@ void *statsFunction(void* p){
   }
 }
 
+void trigger_epb_status() {
+  status_trigger = 1;
+}
+
+void send_epb_status() {
+  static u_char cntr = 0;
+  if (cntr > 0x0f) {
+    cntr = 0;
+  }
+
+  // Send CAN Message
+  CAN_frame_t tx_frame;
+  tx_frame.FIR.B.FF = CAN_frame_std;
+  tx_frame.MsgID = 0x5c0;
+  tx_frame.FIR.B.DLC = 8;
+
+  uint8_t* data = tx_frame.data.u8;
+
+  data[0] = cntr;
+  data[1] = 0x0;
+  data[2] = 0x0;
+  data[3] = 0xa6;
+  data[4] = 0x6c;
+  data[5] = 0x0;
+  data[6] = 0x08;
+  data[7] = data[0] ^ data[1] ^ data[2] ^ data[3] ^ data[4] ^ data[5] ^ data[6];
+
+/*
+  for (int i=0; i<8; i++){
+    Serial.printf("%02x", tx_frame.data.u8[i]);
+  }
+  Serial.printf("\n");
+*/
+
+  int ret = ESP32Can.CANWriteFrame(&tx_frame, 1000);
+
+  cntr++;
+  status_sent++;
+
+}
+
+void setup_epd_timer() {
+  hw_timer_t * timer = NULL;
+
+  timer = timerBegin(0, 80, true);	
+  timerAttachInterrupt(timer, &trigger_epb_status, true);
+  timerAlarmWrite(timer, 20000, true); //each 20ms	
+  timerAlarmEnable(timer);
+}
+
+
 void setup() {
   Serial.begin(2000000);
   Serial.println("Basic Demo - ESP32-Arduino-CAN");
@@ -140,17 +195,24 @@ void setup() {
   ESP32Can.CANInit();
 
   Serial.println("pthread_create");
-  pthread_create(&readThread, NULL, readFunction, NULL);
+  //pthread_create(&readThread, NULL, readFunction, NULL);
   //pthread_create(&statsThread, NULL, statsFunction, NULL);
 
   base64[0] = ':';
+
+  setup_epd_timer();
 
   Serial.println("setup finished");
 }
 
 void loop() {
   static unsigned long last_report;
-  read_bus();
+  //read_bus();
+
+  if (status_trigger) {
+    status_trigger = 0;
+    send_epb_status();
+  }
 
   if (millis() > last_report + 1000){
     last_report = millis();
