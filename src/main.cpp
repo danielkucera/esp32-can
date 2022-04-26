@@ -16,7 +16,7 @@ int msg_count = 0;
 int status_sent = 0;
 bool status_trigger = 0;
 
-#define TCP_MSG_CNT 50              //number of messages to queue per write
+#define TCP_MSG_CNT 10              //number of messages to queue per write
 CAN_frame_t rx_frame[TCP_MSG_CNT];
 CAN_frame_t tx_frame[TCP_MSG_CNT];
 unsigned char base64[(TCP_MSG_CNT*16*4)/3+3];
@@ -133,39 +133,100 @@ void trigger_epb_status() {
   status_trigger = 1;
 }
 
-void send_epb_status() {
-  static u_char cntr = 0;
-  if (cntr > 0x0f) {
-    cntr = 0;
+typedef union {
+	uint8_t U[8]; /**< \brief Unsigned access */
+	struct {
+    /* byte 0 */
+		uint8_t EP1_Zaehler : 4;
+		uint8_t EP1_Failure_Sta : 2;
+		bool EP1_Sta_EPB : 1;
+		bool EP1_Sta_Schalter : 1;
+    /* byte 1 */
+		uint8_t EP1_Spannkraft : 5;
+		uint8_t EP1_Schalterinfo : 2;
+		bool EP1_Sta_NWS : 1;
+    /* byte 2 */
+		uint8_t EP1_Neig_winkel : 8;
+    /* byte 3 */
+		uint8_t EP1_Verzoegerung : 8;
+    /* byte 4 */
+		bool EP1_Failureeintr : 1;
+		bool EP1_Freigabe_Ver : 1;
+		bool EP1_AutoHold_zul : 1;
+		bool EP1_AutoHold_active : 1;
+		bool EP1_SleepInd : 1;
+		bool EP1_Status_Kl_15 : 1;
+		bool EP1_Lampe_AutoP : 1;
+		bool EP1_Bremslicht : 1;
+    /* byte 5 */
+		bool EP1_Warnton1 : 1;
+		bool EP1_Warnton2 : 1;
+		bool EP1_AnfShLock : 1;
+		bool EPB_Autoholdlampe : 1;
+		bool Unknown : 1;
+		bool EP1_KuppModBer : 1;
+    bool Unknown2 : 1;
+		bool EP1_HydrHalten : 1;
+    /* byte 6 */
+		bool EP1_Fkt_Lampe : 1;
+		bool EP1_Warnton : 1;
+		bool EP1_Failure_BKL : 1;
+		bool EP1_Failure_gelb : 1;
+		uint8_t EP1__Text : 4;
+    /* byte 7 */
+		uint8_t EP1_Checksum : 8;
+	} B;
+} epb_message_t;
+
+epb_message_t epb_message;
+
+void epb_init() {
+  //0xa6 = 166; (166÷256)×(7,968+4,224)−7,968 = -0.06225
+  epb_message.B.EP1_Verzoegerung = 0xa6;
+
+  //data[4] = 0x21; b0010 0001
+  //epb_message.B.EP1_Failureeintr = 1;
+  //epb_message.B.EP1_Status_Kl_15 = 1;
+
+  //data[6] = 0x08;
+  //epb_message.B.EP1_Fkt_Lampe = 1;
+
+  //*****************
+
+  epb_message.B.EP1_AutoHold_active = 1;
+  epb_message.B.EPB_Autoholdlampe = 1;
+  epb_message.B.EP1_AutoHold_zul = 1;
+
+  if (true) {
+    for (int i=0; i<8; i++){
+      Serial.printf("%02x", epb_message.U[i]);
+    }
+    Serial.printf("\n");
   }
 
+}
+
+void send_epb_status() {
   // Send CAN Message
   CAN_frame_t tx_frame;
   tx_frame.FIR.B.FF = CAN_frame_std;
   tx_frame.MsgID = 0x5c0;
   tx_frame.FIR.B.DLC = 8;
 
-  uint8_t* data = tx_frame.data.u8;
+  uint8_t* data = epb_message.U;
 
-  data[0] = cntr;
-  data[1] = 0x0;
-  data[2] = 0x0;
-  data[3] = 0xa6;
-  data[4] = 0x6c;
-  data[5] = 0x0;
-  data[6] = 0x08;
   data[7] = data[0] ^ data[1] ^ data[2] ^ data[3] ^ data[4] ^ data[5] ^ data[6];
 
-/*
-  for (int i=0; i<8; i++){
-    Serial.printf("%02x", tx_frame.data.u8[i]);
+  if (false) {
+    for (int i=0; i<8; i++){
+      Serial.printf("%02x", data[i]);
+    }
+    Serial.printf("\n");
   }
-  Serial.printf("\n");
-*/
 
   int ret = ESP32Can.CANWriteFrame(&tx_frame, 1000);
 
-  cntr++;
+  epb_message.B.EP1_Zaehler++;
   status_sent++;
 
 }
@@ -200,6 +261,7 @@ void setup() {
 
   base64[0] = ':';
 
+  epb_init();
   setup_epd_timer();
 
   Serial.println("setup finished");
@@ -207,7 +269,7 @@ void setup() {
 
 void loop() {
   static unsigned long last_report;
-  //read_bus();
+  read_bus();
 
   if (status_trigger) {
     status_trigger = 0;
