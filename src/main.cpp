@@ -15,6 +15,7 @@ int msg_count = 0;
 
 int status_sent = 0;
 bool status_trigger = 0;
+bool nmh_epb_trigger = 0;
 
 #define TCP_MSG_CNT 10              //number of messages to queue per write
 CAN_frame_t rx_frame[TCP_MSG_CNT];
@@ -133,6 +134,10 @@ void trigger_epb_status() {
   status_trigger = 1;
 }
 
+void trigger_nmh_epb() {
+  nmh_epb_trigger = 1;
+}
+
 typedef union {
 	uint8_t U[8]; /**< \brief Unsigned access */
 	struct {
@@ -217,9 +222,38 @@ void send_epb_status() {
 
   data[7] = data[0] ^ data[1] ^ data[2] ^ data[3] ^ data[4] ^ data[5] ^ data[6];
 
+  for (int i=0; i<tx_frame.FIR.B.DLC; i++){
+    tx_frame.data.u8[i] = data[i];
+  }
+
   if (false) {
-    for (int i=0; i<8; i++){
-      Serial.printf("%02x", data[i]);
+    for (int i=0; i<tx_frame.FIR.B.DLC; i++){
+      Serial.printf("%02x", tx_frame.data.u8[i]);
+    }
+    Serial.printf("\n");
+  }
+
+  int ret = ESP32Can.CANWriteFrame(&tx_frame, 1000);
+
+  epb_message.B.EP1_Zaehler++;
+  status_sent++;
+
+}
+
+void send_nmh_epb() {
+  // Send CAN Message
+  CAN_frame_t tx_frame;
+  tx_frame.FIR.B.FF = CAN_frame_std;
+  tx_frame.MsgID = 0x739;
+  tx_frame.FIR.B.DLC = 7;
+
+  tx_frame.data.u8[0] = 0x04;
+  tx_frame.data.u8[1] = 0x03;
+  tx_frame.data.u8[2] = 0x01;
+
+  if (false) {
+    for (int i=0; i<tx_frame.FIR.B.DLC; i++){
+      Serial.printf("%02x", tx_frame.data.u8[i]);
     }
     Serial.printf("\n");
   }
@@ -238,6 +272,13 @@ void setup_epd_timer() {
   timerAttachInterrupt(timer, &trigger_epb_status, true);
   timerAlarmWrite(timer, 20000, true); //each 20ms	
   timerAlarmEnable(timer);
+
+  hw_timer_t * timer2 = NULL;
+
+  timer2 = timerBegin(1, 80, true);
+  timerAttachInterrupt(timer2, &trigger_epb_status, true);
+  timerAlarmWrite(timer2, 200000, true); //each 200ms
+  timerAlarmEnable(timer2);
 }
 
 
@@ -274,6 +315,11 @@ void loop() {
   if (status_trigger) {
     status_trigger = 0;
     send_epb_status();
+  }
+
+  if (nmh_epb_trigger) {
+    nmh_epb_trigger = 0;
+    //send_nmh_epb();
   }
 
   if (millis() > last_report + 1000){
