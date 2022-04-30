@@ -187,9 +187,9 @@ void epb_init() {
 
   //*****************
 
-  epb_message.B.EP1_AutoHold_active = 1;
-  epb_message.B.EPB_Autoholdlampe = 1;
-  epb_message.B.EP1_AutoHold_zul = 1;
+  //epb_message.B.EP1_AutoHold_active = 1;
+  //epb_message.B.EPB_Autoholdlampe = 1;
+  //epb_message.B.EP1_AutoHold_zul = 1;
 
   if (true) {
     for (int i=0; i<8; i++){
@@ -278,13 +278,13 @@ void set_warninig(bool status){
   if (last_status != status) {
     if (last_status == OFF){
       log("!!! HOLD BRAKES !!!\n");
-      epb_message.B.EP1_Warnton = 1;
+      epb_message.B.EP1_AnfShLock = 1; // press pedal icon
       epb_message.B.EP1__Text = 4; // EP1__Text, Text_4 "0100 Press the brake pedal"
       digitalWrite(LED, 1);
       // TODO: add beeper
     } else {
       log("!!! RELEASE BRAKES !!!\n");
-      epb_message.B.EP1_Warnton = 0;
+      epb_message.B.EP1_AnfShLock = 0;
       epb_message.B.EP1__Text = 0;
       digitalWrite(LED, 0);
     }
@@ -340,6 +340,7 @@ void process_input(){
     } else if (millis() > last_autohold_activated + AUTOHOLD_RESET_MS) {
       // autohold limit approaching
       set_warninig(ON);
+
     }
   }
 
