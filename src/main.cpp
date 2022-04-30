@@ -32,7 +32,15 @@ CAN_frame_t tx_frame[TCP_MSG_CNT];
 unsigned char base64[(TCP_MSG_CNT*16*4)/3+3];
 
 void report_stats(){
-  printf("loop time:%ld rcvd: %d, txerr:%d rx_overrun:%d status_sent:%d \n", millis(), msg_count, MODULE_CAN->TXERR.U, ESP32Can.CANOverrunCounter(), status_sent);
+  printf("time:%ld rcvd: %d, txerr:%d rx_overrun:%d epb_sent:%d ", millis(), msg_count, MODULE_CAN->TXERR.U, ESP32Can.CANOverrunCounter(), status_sent);
+  printf("br_light:%d br_press:%d, br_sta_dru:%d br_dru_val:%d autoh_act:%d autoh_sta:%d epb_sta:%d \n", 
+    abs_message.B.BR5_Bremslicht, 
+    abs_message.B.BR5_Bremsdruck,
+    abs_message.B.BR5_Sta_Druck,
+    abs_message.B.BR5_Druckvalid,
+    abs_message.B.ESP_Autohold_active,
+    abs_message.B.ESP_Autohold_Standby,
+    epb_message.B.EP1_Sta_EPB);
   msg_count = 0;
 }
 
@@ -255,12 +263,15 @@ void setup_epd_timer() {
 
 void process_input(){
   static unsigned long last_autohold_activated = 0;
+  static unsigned long last_autohold_deactivated = 0;
   static bool last_autohold_status = 0;
   static bool autohold_reset_needed = 0;
 
   if (last_autohold_status != abs_message.B.ESP_Autohold_active) {
     if (last_autohold_status == 0) {
       last_autohold_activated = millis();
+    } else {
+      last_autohold_deactivated = millis();
     }
   }
   last_autohold_status = abs_message.B.ESP_Autohold_active;
@@ -269,18 +280,33 @@ void process_input(){
     if (!autohold_reset_needed) {
       autohold_reset_needed = 1;
       Serial.print("!!! PRESS BRAKES !!!\n");
+      epb_message.B.EP1_Warnton = 1;
+      epb_message.B.EP1__Text = 4; // EP1__Text, Text_4 "0100 Press the brake pedal"
     }
   }
 
-  if (autohold_reset_needed) {
-    epb_message.B.EP1_Warnton = 1;
-    epb_message.B.EP1__Text = 4; // EP1__Text, Text_4 "0100 Press the brake pedal"
+  if (abs_message.B.ESP_Autohold_active && 
+      (abs_message.B.BR5_Bremsdruck > 100) &&
+      (millis() > last_autohold_activated + 3*1000) &&
+      !autohold_reset_needed) {
+      Serial.print("Reactivating autohold due to brake press\n");
+      autohold_reset_needed = 1;
+  }
 
-    if (abs_message.B.BR5_Bremslicht) {
+  if (abs_message.B.ESP_Anforderung_EPB == 2) {
+    //If we do engage and disengage fast enough, the pressure in the valve will not have time to release
+    Serial.print("ABS requesting EPB, EPB engaging\n");
+    autohold_reset_needed = 1;
+    epb_message.B.EP1_Sta_EPB = 1;
+  }
+
+  if (autohold_reset_needed) {
+
+    if (abs_message.B.BR5_Bremsdruck > 100) {
       epb_message.B.EP1_Sta_EPB = 1;
     }
 
-    if (!abs_message.B.ESP_Autohold_active) {
+    if (!abs_message.B.ESP_Autohold_active && (millis() < last_autohold_deactivated + 100)) {
       epb_message.B.EP1_Sta_EPB = 0;
       autohold_reset_needed = 0;
       Serial.print("!!! AUTOHOLD REACTIVATED, RELEASE BRAKES !!!\n");
