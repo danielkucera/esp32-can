@@ -3,6 +3,12 @@
 #include <CAN_config.h>
 #include <can_regdef.h>
 #include "base64.hpp"
+#include "messages.h"
+
+#define LED 2
+#define AUTOHOLD_RESET_SECONDS 10
+#define BREMSE_5_ID 0x04a8
+#define MEPB1_ID 0x5c0
 
 char incomingPacket[255];  // buffer for incoming packets
 
@@ -16,6 +22,9 @@ int msg_count = 0;
 int status_sent = 0;
 bool status_trigger = 0;
 bool nmh_epb_trigger = 0;
+
+mEPB_1 epb_message;
+Bremse_5 abs_message;
 
 #define TCP_MSG_CNT 10              //number of messages to queue per write
 CAN_frame_t rx_frame[TCP_MSG_CNT];
@@ -36,6 +45,12 @@ void read_bus(){
 
   while ((i<TCP_MSG_CNT) && (micros() < start + 1000)){
     if (xQueueReceive(CAN_cfg.rx_queue, &(rx_frame[i]), 5*portTICK_PERIOD_MS) == pdTRUE) {
+
+      // if abs message, copy to status
+      if (rx_frame[i].MsgID == BREMSE_5_ID){
+        memcpy(abs_message.U, rx_frame[i].data.u8, 8);
+      }
+
       msg_count++;
       i++;
     } else {
@@ -54,14 +69,18 @@ void read_bus(){
   int to_send = i*sizeof(CAN_frame_t);
 
   //printf("before write %d\n", to_send);
-  unsigned int base64_length = encode_base64((u_char*)(&rx_frame), to_send, base64+1);
-  base64[base64_length+1]='\n';
 
-  int snt = Serial.write(base64, base64_length+2);
-  
-  //printf("after write\n");
-  if (snt < to_send){
-    printf("short write %d of %d\n", snt, to_send);
+  if (false) {
+    unsigned int base64_length = encode_base64((u_char*)(&rx_frame), to_send, base64+1);
+    base64[base64_length+1]='\n';
+
+    int snt = Serial.write(base64, base64_length+2);
+    
+    //printf("after write\n");
+    if (snt < to_send){
+      printf("short write %d of %d\n", snt, to_send);
+    }
+
   }
 
 }
@@ -138,53 +157,6 @@ void trigger_nmh_epb() {
   nmh_epb_trigger = 1;
 }
 
-typedef union {
-	uint8_t U[8]; /**< \brief Unsigned access */
-	struct {
-    /* byte 0 */
-		uint8_t EP1_Zaehler : 4;
-		uint8_t EP1_Failure_Sta : 2;
-		bool EP1_Sta_EPB : 1;
-		bool EP1_Sta_Schalter : 1;
-    /* byte 1 */
-		uint8_t EP1_Spannkraft : 5;
-		uint8_t EP1_Schalterinfo : 2;
-		bool EP1_Sta_NWS : 1;
-    /* byte 2 */
-		uint8_t EP1_Neig_winkel : 8;
-    /* byte 3 */
-		uint8_t EP1_Verzoegerung : 8;
-    /* byte 4 */
-		bool EP1_Failureeintr : 1;
-		bool EP1_Freigabe_Ver : 1;
-		bool EP1_AutoHold_zul : 1;
-		bool EP1_AutoHold_active : 1;
-		bool EP1_SleepInd : 1;
-		bool EP1_Status_Kl_15 : 1;
-		bool EP1_Lampe_AutoP : 1;
-		bool EP1_Bremslicht : 1;
-    /* byte 5 */
-		bool EP1_Warnton1 : 1;
-		bool EP1_Warnton2 : 1;
-		bool EP1_AnfShLock : 1;
-		bool EPB_Autoholdlampe : 1;
-		bool Unknown : 1;
-		bool EP1_KuppModBer : 1;
-    bool Unknown2 : 1;
-		bool EP1_HydrHalten : 1;
-    /* byte 6 */
-		bool EP1_Fkt_Lampe : 1;
-		bool EP1_Warnton : 1;
-		bool EP1_Failure_BKL : 1;
-		bool EP1_Failure_gelb : 1;
-		uint8_t EP1__Text : 4;
-    /* byte 7 */
-		uint8_t EP1_Checksum : 8;
-	} B;
-} epb_message_t;
-
-epb_message_t epb_message;
-
 void epb_init() {
   //0xa6 = 166; (166÷256)×(7,968+4,224)−7,968 = -0.06225
   epb_message.B.EP1_Verzoegerung = 0xa6;
@@ -215,7 +187,7 @@ void send_epb_status() {
   // Send CAN Message
   CAN_frame_t tx_frame;
   tx_frame.FIR.B.FF = CAN_frame_std;
-  tx_frame.MsgID = 0x5c0;
+  tx_frame.MsgID = MEPB1_ID;
   tx_frame.FIR.B.DLC = 8;
 
   uint8_t* data = epb_message.U;
@@ -281,10 +253,86 @@ void setup_epd_timer() {
   timerAlarmEnable(timer2);
 }
 
+void process_input(){
+  static unsigned long last_autohold_activated = 0;
+  static bool last_autohold_status = 0;
+  static bool autohold_reset_needed = 0;
+
+  if (last_autohold_status != abs_message.B.ESP_Autohold_active) {
+    if (last_autohold_status == 0) {
+      last_autohold_activated = millis();
+    }
+  }
+  last_autohold_status = abs_message.B.ESP_Autohold_active;
+
+  if ((millis() > last_autohold_activated + AUTOHOLD_RESET_SECONDS*1000) && abs_message.B.ESP_Autohold_active) {
+    if (!autohold_reset_needed) {
+      autohold_reset_needed = 1;
+      Serial.print("!!! PRESS BRAKES !!!\n");
+    }
+  }
+
+  if (autohold_reset_needed) {
+    epb_message.B.EP1_Warnton = 1;
+    epb_message.B.EP1__Text = 4; // EP1__Text, Text_4 "0100 Press the brake pedal"
+
+    if (abs_message.B.BR5_Bremslicht) {
+      epb_message.B.EP1_Sta_EPB = 1;
+    }
+
+    if (!abs_message.B.ESP_Autohold_active) {
+      epb_message.B.EP1_Sta_EPB = 0;
+      autohold_reset_needed = 0;
+      Serial.print("!!! AUTOHOLD REACTIVATED, RELEASE BRAKES !!!\n");
+    }
+
+  } else {
+    epb_message.B.EP1_Warnton = 0;
+    epb_message.B.EP1_Warnton1 = 0;
+    epb_message.B.EP1_Warnton2 = 0;
+    epb_message.B.EP1__Text = 0;
+  }
+
+}
+
+void process_input_old() {
+  static bool last_epb_active = 0;
+  static unsigned long active_since = 0;
+
+  digitalWrite(LED, epb_message.B.EP1_Sta_EPB);
+
+  if (epb_message.B.EP1_Sta_EPB != last_epb_active) {
+    if (!last_epb_active) { // save when we activated
+      active_since = millis();
+    }
+
+  }
+  last_epb_active = epb_message.B.EP1_Sta_EPB;
+
+  if (millis() > active_since + 1000) {
+
+    epb_message.B.EP1_Sta_EPB = 0;
+
+  }
+
+  if (abs_message.B.ESP_Anforderung_EPB == 2) {
+
+    if(false){
+      epb_message.B.EP1_Sta_EPB = 1;
+      epb_message.B.EP1_Fkt_Lampe = 1;
+    } else {
+      epb_message.B.EP1_AutoHold_active = 1;
+    }
+  }
+
+}
 
 void setup() {
-  Serial.begin(2000000);
+  Serial.begin(460800);
   Serial.println("Basic Demo - ESP32-Arduino-CAN");
+
+  pinMode(LED, OUTPUT);
+  digitalWrite(LED, 0);
 
   CAN_cfg.speed = CAN_SPEED_500KBPS;
   CAN_cfg.tx_pin_id = GPIO_NUM_23;
@@ -292,6 +340,20 @@ void setup() {
   Serial.println("xQueueCreate");
   CAN_cfg.rx_queue = xQueueCreate(rx_queue_size, sizeof(CAN_frame_t));
   // Init CAN Module
+
+  CAN_filter_t p_filter;
+  p_filter.FM = Single_Mode;
+
+  p_filter.ACR0 = ((BREMSE_5_ID >> 3) & 0xff);
+  p_filter.ACR1 = ((BREMSE_5_ID << 5) & 0xff);
+  p_filter.ACR2 = 0;
+  p_filter.ACR3 = 0;
+
+  p_filter.AMR0 = 0x00;
+  p_filter.AMR1 = 0x1F;
+  p_filter.AMR2 = 0xFF;
+  p_filter.AMR3 = 0xFF;
+  ESP32Can.CANConfigFilter(&p_filter);
 
   Serial.println("CANInit");
   ESP32Can.CANInit();
@@ -311,6 +373,8 @@ void setup() {
 void loop() {
   static unsigned long last_report;
   read_bus();
+
+  process_input();
 
   if (status_trigger) {
     status_trigger = 0;
