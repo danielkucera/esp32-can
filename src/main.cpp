@@ -6,9 +6,12 @@
 #include "messages.h"
 
 #define LED 2
-#define AUTOHOLD_RESET_SECONDS 10
+#define AUTOHOLD_RESET_MS (10*1000)
 #define BREMSE_5_ID 0x04a8
 #define MEPB1_ID 0x5c0
+
+#define OFF false
+#define ON true
 
 char incomingPacket[255];  // buffer for incoming packets
 
@@ -30,6 +33,10 @@ Bremse_5 abs_message;
 CAN_frame_t rx_frame[TCP_MSG_CNT];
 CAN_frame_t tx_frame[TCP_MSG_CNT];
 unsigned char base64[(TCP_MSG_CNT*16*4)/3+3];
+
+void log(const char * logline) {
+  Serial.printf("%ld %s", millis(), logline);
+}
 
 void report_stats(){
   printf("time:%ld rcvd: %d, txerr:%d rx_overrun:%d epb_sent:%d ", millis(), msg_count, MODULE_CAN->TXERR.U, ESP32Can.CANOverrunCounter(), status_sent);
@@ -213,8 +220,11 @@ void send_epb_status() {
     Serial.printf("\n");
   }
 
-  int ret = ESP32Can.CANWriteFrame(&tx_frame, 1000);
-
+  int ret = 1;
+  while(ret){
+    ret = ESP32Can.CANWriteFrame(&tx_frame, 1000);
+  }
+  
   epb_message.B.EP1_Zaehler++;
   status_sent++;
 
@@ -239,10 +249,9 @@ void send_nmh_epb() {
   }
 
   int ret = ESP32Can.CANWriteFrame(&tx_frame, 1000);
-
-  epb_message.B.EP1_Zaehler++;
-  status_sent++;
-
+  if (ret){
+    log("sending nhm message failed");
+  }
 }
 
 void setup_epd_timer() {
@@ -261,93 +270,71 @@ void setup_epd_timer() {
   timerAlarmEnable(timer2);
 }
 
+void set_warninig(bool status){
+  static bool last_status = false;
+
+  if (last_status != status) {
+    if (last_status == OFF){
+      log("!!! HOLD BRAKES !!!\n");
+      epb_message.B.EP1_Warnton = 1;
+      epb_message.B.EP1__Text = 4; // EP1__Text, Text_4 "0100 Press the brake pedal"
+    } else {
+      log("!!! RELEASE BRAKES !!!\n");
+      epb_message.B.EP1_Warnton = 0;
+      epb_message.B.EP1__Text = 0;
+    }
+  }
+  last_status = status;
+}
+
+void set_epb(bool status){
+  epb_message.B.EP1_Sta_EPB = status;
+  set_warninig(status); // EPB ON = WARNING ON
+}
+
 void process_input(){
   static unsigned long last_autohold_activated = 0;
   static unsigned long last_autohold_deactivated = 0;
   static bool last_autohold_status = 0;
-  static bool autohold_reset_needed = 0;
+  static uint8_t last_request_status = 0;
 
   if (last_autohold_status != abs_message.B.ESP_Autohold_active) {
     if (last_autohold_status == 0) {
+      log("AUTOHOLD ACTIVATED, RELEASE BRAKES\n");
       last_autohold_activated = millis();
+      set_epb(OFF);
     } else {
+      log("AUTOHOLD DEACTIVATED\n");
       last_autohold_deactivated = millis();
+      set_epb(OFF);
     }
+
   }
   last_autohold_status = abs_message.B.ESP_Autohold_active;
 
-  if ((millis() > last_autohold_activated + AUTOHOLD_RESET_SECONDS*1000) && abs_message.B.ESP_Autohold_active) {
-    if (!autohold_reset_needed) {
-      autohold_reset_needed = 1;
-      Serial.print("!!! PRESS BRAKES !!!\n");
-      epb_message.B.EP1_Warnton = 1;
-      epb_message.B.EP1__Text = 4; // EP1__Text, Text_4 "0100 Press the brake pedal"
-    }
-  }
-
-  if (abs_message.B.ESP_Autohold_active && 
-      (abs_message.B.BR5_Bremsdruck > 100) &&
-      (millis() > last_autohold_activated + 3*1000) &&
-      !autohold_reset_needed) {
-      Serial.print("Reactivating autohold due to brake press\n");
-      autohold_reset_needed = 1;
-  }
-
-  if (abs_message.B.ESP_Anforderung_EPB == 2) {
-    //If we do engage and disengage fast enough, the pressure in the valve will not have time to release
-    Serial.print("ABS requesting EPB, EPB engaging\n");
-    autohold_reset_needed = 1;
-    epb_message.B.EP1_Sta_EPB = 1;
-  }
-
-  if (autohold_reset_needed) {
-
-    if (abs_message.B.BR5_Bremsdruck > 100) {
-      epb_message.B.EP1_Sta_EPB = 1;
-    }
-
-    if (!abs_message.B.ESP_Autohold_active && (millis() < last_autohold_deactivated + 100)) {
-      epb_message.B.EP1_Sta_EPB = 0;
-      autohold_reset_needed = 0;
-      Serial.print("!!! AUTOHOLD REACTIVATED, RELEASE BRAKES !!!\n");
-    }
-
-  } else {
-    epb_message.B.EP1_Warnton = 0;
-    epb_message.B.EP1_Warnton1 = 0;
-    epb_message.B.EP1_Warnton2 = 0;
-    epb_message.B.EP1__Text = 0;
-  }
-
-}
-
-void process_input_old() {
-  static bool last_epb_active = 0;
-  static unsigned long active_since = 0;
-
-  digitalWrite(LED, epb_message.B.EP1_Sta_EPB);
-
-  if (epb_message.B.EP1_Sta_EPB != last_epb_active) {
-    if (!last_epb_active) { // save when we activated
-      active_since = millis();
-    }
-
-  }
-  last_epb_active = epb_message.B.EP1_Sta_EPB;
-
-  if (millis() > active_since + 1000) {
-
-    epb_message.B.EP1_Sta_EPB = 0;
-
-  }
-
-  if (abs_message.B.ESP_Anforderung_EPB == 2) {
-
-    if(false){
-      epb_message.B.EP1_Sta_EPB = 1;
-      epb_message.B.EP1_Fkt_Lampe = 1;
+  if (last_request_status != abs_message.B.ESP_Anforderung_EPB) {
+    if (last_request_status == 0) {
+      log("ABS requesting EPB, EPB engaging\n");
+      set_epb(ON);
     } else {
-      epb_message.B.EP1_AutoHold_active = 1;
+      //If we do engage and disengage fast enough, the pressure in the valve will not have time to release?
+      log("ABS EPB request off, EPB off\n");
+      set_epb(OFF);
+    }
+  }
+  last_request_status = abs_message.B.ESP_Anforderung_EPB;
+
+  if (abs_message.B.ESP_Autohold_active) {
+    if (millis() < last_autohold_activated + 3*1000) {
+      // nothing to do autohold active only very short
+    } else if (abs_message.B.BR5_Bremsdruck > 100) {
+      // breake pedal pressed, reset autohold
+      log("Reactivating autohold due to brake press\n");
+      set_epb(ON);
+
+    } else if (millis() > last_autohold_activated + AUTOHOLD_RESET_MS) {
+      // autohold limit approaching
+      set_warninig(ON);
     }
   }
 
