@@ -6,7 +6,9 @@
 #include "messages.h"
 
 #define LED 2
-#define AUTOHOLD_RESET_MS (10*1000)
+#define AUTOHOLD_RESET_MS (10*1000) // time in ms after autohold start to start warning
+#define REQUIRED_PEDAL_PRESSURE 100 // pedal pressure required for autohold reset
+#define RESET_MINIMAL_MS (3*1000) // time in ms after autohold start during which autohold reset is disabled
 #define BREMSE_5_ID 0x04a8
 #define MEPB1_ID 0x5c0
 
@@ -224,7 +226,7 @@ void send_epb_status() {
   while(ret){
     ret = ESP32Can.CANWriteFrame(&tx_frame, 1000);
   }
-  
+
   epb_message.B.EP1_Zaehler++;
   status_sent++;
 
@@ -278,10 +280,13 @@ void set_warninig(bool status){
       log("!!! HOLD BRAKES !!!\n");
       epb_message.B.EP1_Warnton = 1;
       epb_message.B.EP1__Text = 4; // EP1__Text, Text_4 "0100 Press the brake pedal"
+      digitalWrite(LED, 1);
+      // TODO: add beeper
     } else {
       log("!!! RELEASE BRAKES !!!\n");
       epb_message.B.EP1_Warnton = 0;
       epb_message.B.EP1__Text = 0;
+      digitalWrite(LED, 0);
     }
   }
   last_status = status;
@@ -325,9 +330,9 @@ void process_input(){
   last_request_status = abs_message.B.ESP_Anforderung_EPB;
 
   if (abs_message.B.ESP_Autohold_active) {
-    if (millis() < last_autohold_activated + 3*1000) {
+    if (millis() < last_autohold_activated + RESET_MINIMAL_MS) {
       // nothing to do autohold active only very short
-    } else if (abs_message.B.BR5_Bremsdruck > 100) {
+    } else if (abs_message.B.BR5_Bremsdruck > REQUIRED_PEDAL_PRESSURE) {
       // breake pedal pressed, reset autohold
       log("Reactivating autohold due to brake press\n");
       set_epb(ON);
