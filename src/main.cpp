@@ -276,7 +276,7 @@ void setup_epd_timer() {
   timerAlarmEnable(timer2);
 }
 
-void set_warninig(bool status){
+void set_warning(bool status){
   static bool last_status = false;
 
   if (last_status != status) {
@@ -298,7 +298,7 @@ void set_warninig(bool status){
 
 void set_epb(bool status){
   epb_message.B.EP1_Sta_EPB = status;
-  set_warninig(status); // EPB ON = WARNING ON
+  set_warning(status); // EPB ON = WARNING ON
 }
 
 void process_input(){
@@ -343,7 +343,7 @@ void process_input(){
 
     } else if (millis() > last_autohold_activated + AUTOHOLD_RESET_MS) {
       // autohold limit approaching
-      set_warninig(ON);
+      set_warning(ON);
 
     }
   }
