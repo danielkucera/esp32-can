@@ -178,6 +178,10 @@ void epb_init() {
   //0xa6 = 166; (166÷256)×(7,968+4,224)−7,968 = -0.06225
   epb_message.B.EP1_Verzoegerung = 0xa6;
 
+  // should enable autohold setting in cluster
+  // doesn't work without cluster mod
+  epb_message.B.EP1_AutoHold_zul = 1;
+
   //data[4] = 0x21; b0010 0001
   //epb_message.B.EP1_Failureeintr = 1;
   //epb_message.B.EP1_Status_Kl_15 = 1;
