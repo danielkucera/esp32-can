@@ -1,19 +1,6 @@
-#include <Arduino.h>
-#include <ESP32CAN.h>
-#include <CAN_config.h>
+#include "main.h"
 #include <can_regdef.h>
 #include "base64.hpp"
-#include "messages.h"
-
-#define LED 2
-#define AUTOHOLD_RESET_MS (10*1000) // time in ms after autohold start to start warning
-#define REQUIRED_PEDAL_PRESSURE 100 // pedal pressure required for autohold reset
-#define RESET_MINIMAL_MS (3*1000) // time in ms after autohold start during which autohold reset is disabled
-#define BREMSE_5_ID 0x04a8
-#define MEPB1_ID 0x5c0
-
-#define OFF false
-#define ON true
 
 char incomingPacket[255];  // buffer for incoming packets
 
@@ -23,13 +10,6 @@ const int rx_queue_size = 512;       // Receive Queue size
 pthread_t readThread;
 pthread_t statsThread;
 int msg_count = 0;
-
-int status_sent = 0;
-bool status_trigger = 0;
-bool nmh_epb_trigger = 0;
-
-mEPB_1 epb_message;
-Bremse_5 abs_message;
 
 #define TCP_MSG_CNT 10              //number of messages to queue per write
 CAN_frame_t rx_frame[TCP_MSG_CNT];
@@ -41,7 +21,7 @@ void log(const char * logline) {
 }
 
 void report_stats(){
-  printf("time:%ld rcvd: %d, txerr:%d rx_overrun:%d epb_sent:%d ", millis(), msg_count, MODULE_CAN->TXERR.U, ESP32Can.CANOverrunCounter(), status_sent);
+  printf("time:%ld rcvd: %d, txerr:%d rx_overrun:%d ", millis(), msg_count, MODULE_CAN->TXERR.U, ESP32Can.CANOverrunCounter());
   printf("br_light:%d br_press:%d, br_sta_dru:%d br_dru_val:%d autoh_act:%d autoh_sta:%d epb_sta:%d \n", 
     abs_message.B.BR5_Bremslicht, 
     abs_message.B.BR5_Bremsdruck,
@@ -50,6 +30,14 @@ void report_stats(){
     abs_message.B.ESP_Autohold_active,
     abs_message.B.ESP_Autohold_Standby,
     epb_message.B.EP1_Sta_EPB);
+  printf("Down_kurz:%d Up_kurz:%d, Down_lang:%d Up_lang:%d Recall:%d Neu_Setzen:%d Zeitluecke:%d \n", 
+    gra_message.B.GRA_Down_kurz,
+    gra_message.B.GRA_Up_kurz,
+    gra_message.B.GRA_Down_lang,
+    gra_message.B.GRA_Up_lang,
+    gra_message.B.GRA_Recall,
+    gra_message.B.GRA_Neu_Setzen,
+    gra_message.B.GRA_Zeitluecke);
   msg_count = 0;
 }
 
@@ -66,6 +54,11 @@ void read_bus(){
       // if abs message, copy to status
       if (rx_frame[i].MsgID == BREMSE_5_ID){
         memcpy(abs_message.U, rx_frame[i].data.u8, 8);
+      }
+
+      // if gra message, copy to gra
+      if (rx_frame[i].MsgID == GRA_NEU_ID){
+        memcpy(gra_message.U, rx_frame[i].data.u8, 4);
       }
 
       msg_count++;
@@ -166,189 +159,6 @@ void *statsFunction(void* p){
   }
 }
 
-void trigger_epb_status() {
-  status_trigger = 1;
-}
-
-void trigger_nmh_epb() {
-  nmh_epb_trigger = 1;
-}
-
-void epb_init() {
-  //0xa6 = 166; (166÷256)×(7,968+4,224)−7,968 = -0.06225
-  epb_message.B.EP1_Verzoegerung = 0xa6;
-
-  // should enable autohold setting in cluster
-  // doesn't work without cluster mod
-  epb_message.B.EP1_AutoHold_zul = 1;
-
-  //data[4] = 0x21; b0010 0001
-  //epb_message.B.EP1_Failureeintr = 1;
-  //epb_message.B.EP1_Status_Kl_15 = 1;
-
-  //data[6] = 0x08;
-  //epb_message.B.EP1_Fkt_Lampe = 1;
-
-  //*****************
-
-  //epb_message.B.EP1_AutoHold_active = 1;
-  //epb_message.B.EPB_Autoholdlampe = 1;
-  //epb_message.B.EP1_AutoHold_zul = 1;
-
-  if (true) {
-    for (int i=0; i<8; i++){
-      Serial.printf("%02x", epb_message.U[i]);
-    }
-    Serial.printf("\n");
-  }
-
-}
-
-void send_epb_status() {
-  // Send CAN Message
-  CAN_frame_t tx_frame;
-  tx_frame.FIR.B.FF = CAN_frame_std;
-  tx_frame.MsgID = MEPB1_ID;
-  tx_frame.FIR.B.DLC = 8;
-
-  uint8_t* data = epb_message.U;
-
-  data[7] = data[0] ^ data[1] ^ data[2] ^ data[3] ^ data[4] ^ data[5] ^ data[6];
-
-  for (int i=0; i<tx_frame.FIR.B.DLC; i++){
-    tx_frame.data.u8[i] = data[i];
-  }
-
-  if (false) {
-    for (int i=0; i<tx_frame.FIR.B.DLC; i++){
-      Serial.printf("%02x", tx_frame.data.u8[i]);
-    }
-    Serial.printf("\n");
-  }
-
-  int ret = 1;
-  while(ret){
-    ret = ESP32Can.CANWriteFrame(&tx_frame, 1000);
-  }
-
-  epb_message.B.EP1_Zaehler++;
-  status_sent++;
-
-}
-
-void send_nmh_epb() {
-  // Send CAN Message
-  CAN_frame_t tx_frame;
-  tx_frame.FIR.B.FF = CAN_frame_std;
-  tx_frame.MsgID = 0x739;
-  tx_frame.FIR.B.DLC = 7;
-
-  tx_frame.data.u8[0] = 0x04;
-  tx_frame.data.u8[1] = 0x03;
-  tx_frame.data.u8[2] = 0x01;
-
-  if (false) {
-    for (int i=0; i<tx_frame.FIR.B.DLC; i++){
-      Serial.printf("%02x", tx_frame.data.u8[i]);
-    }
-    Serial.printf("\n");
-  }
-
-  int ret = ESP32Can.CANWriteFrame(&tx_frame, 1000);
-  if (ret){
-    log("sending nhm message failed");
-  }
-}
-
-void setup_epd_timer() {
-  hw_timer_t * timer = NULL;
-
-  timer = timerBegin(0, 80, true);	
-  timerAttachInterrupt(timer, &trigger_epb_status, true);
-  timerAlarmWrite(timer, 20000, true); //each 20ms	
-  timerAlarmEnable(timer);
-
-  hw_timer_t * timer2 = NULL;
-
-  timer2 = timerBegin(1, 80, true);
-  timerAttachInterrupt(timer2, &trigger_epb_status, true);
-  timerAlarmWrite(timer2, 200000, true); //each 200ms
-  timerAlarmEnable(timer2);
-}
-
-void set_warning(bool status){
-  static bool last_status = false;
-
-  if (last_status != status) {
-    if (last_status == OFF){
-      log("!!! HOLD BRAKES !!!\n");
-      epb_message.B.EP1_AnfShLock = 1; // press pedal icon
-      epb_message.B.EP1__Text = 4; // EP1__Text, Text_4 "0100 Press the brake pedal"
-      digitalWrite(LED, 1);
-      // TODO: add beeper
-    } else {
-      log("!!! RELEASE BRAKES !!!\n");
-      epb_message.B.EP1_AnfShLock = 0;
-      epb_message.B.EP1__Text = 0;
-      digitalWrite(LED, 0);
-    }
-  }
-  last_status = status;
-}
-
-void set_epb(bool status){
-  epb_message.B.EP1_Sta_EPB = status;
-  set_warning(status); // EPB ON = WARNING ON
-}
-
-void process_input(){
-  static unsigned long last_autohold_activated = 0;
-  static unsigned long last_autohold_deactivated = 0;
-  static bool last_autohold_status = 0;
-  static uint8_t last_request_status = 0;
-
-  if (last_autohold_status != abs_message.B.ESP_Autohold_active) {
-    if (last_autohold_status == 0) {
-      log("AUTOHOLD ACTIVATED, RELEASE BRAKES\n");
-      last_autohold_activated = millis();
-      set_epb(OFF);
-    } else {
-      log("AUTOHOLD DEACTIVATED\n");
-      last_autohold_deactivated = millis();
-      set_epb(OFF);
-    }
-
-  }
-  last_autohold_status = abs_message.B.ESP_Autohold_active;
-
-  if (last_request_status != abs_message.B.ESP_Anforderung_EPB) {
-    if (last_request_status == 0) {
-      log("ABS requesting EPB, EPB engaging\n");
-      set_epb(ON);
-    } else {
-      //If we do engage and disengage fast enough, the pressure in the valve will not have time to release?
-      log("ABS EPB request off, EPB off\n");
-      set_epb(OFF);
-    }
-  }
-  last_request_status = abs_message.B.ESP_Anforderung_EPB;
-
-  if (abs_message.B.ESP_Autohold_active) {
-    if (millis() < last_autohold_activated + RESET_MINIMAL_MS) {
-      // nothing to do autohold active only very short
-    } else if (abs_message.B.BR5_Bremsdruck > REQUIRED_PEDAL_PRESSURE) {
-      // breake pedal pressed, reset autohold
-      log("Reactivating autohold due to brake press\n");
-      set_epb(ON);
-
-    } else if (millis() > last_autohold_activated + AUTOHOLD_RESET_MS) {
-      // autohold limit approaching
-      set_warning(ON);
-
-    }
-  }
-
-}
 
 void setup() {
   Serial.begin(460800);
@@ -365,17 +175,17 @@ void setup() {
   // Init CAN Module
 
   CAN_filter_t p_filter;
-  p_filter.FM = Single_Mode;
+  p_filter.FM = Dual_Mode;
 
   p_filter.ACR0 = ((BREMSE_5_ID >> 3) & 0xff);
   p_filter.ACR1 = ((BREMSE_5_ID << 5) & 0xff);
-  p_filter.ACR2 = 0;
-  p_filter.ACR3 = 0;
+  p_filter.ACR2 = ((GRA_NEU_ID >> 3) & 0xff);
+  p_filter.ACR3 = ((GRA_NEU_ID << 5) & 0xff);
 
   p_filter.AMR0 = 0x00;
   p_filter.AMR1 = 0x1F;
-  p_filter.AMR2 = 0xFF;
-  p_filter.AMR3 = 0xFF;
+  p_filter.AMR2 = 0x00;
+  p_filter.AMR3 = 0x1F;
   ESP32Can.CANConfigFilter(&p_filter);
 
   Serial.println("CANInit");
@@ -388,7 +198,7 @@ void setup() {
   base64[0] = ':';
 
   epb_init();
-  setup_epd_timer();
+  //acc_init();
 
   Serial.println("setup finished");
 }
@@ -397,16 +207,17 @@ void loop() {
   static unsigned long last_report;
   read_bus();
 
-  process_input();
+  process_epb();
 
-  if (status_trigger) {
-    status_trigger = 0;
-    send_epb_status();
-  }
+  //process_acc();
 
-  if (nmh_epb_trigger) {
-    nmh_epb_trigger = 0;
-    //send_nmh_epb();
+
+  if (Serial.available() > 0) {
+    int cmd = Serial.read();
+    Serial.printf("received %c\n", cmd);
+
+    keypress_epb(cmd);
+    keypress_acc(cmd);
   }
 
   if (millis() > last_report + 1000){
