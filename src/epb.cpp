@@ -75,36 +75,17 @@ void report_epb() {
 
 
 void send_epb_status() {
-  //Serial.print("sending epb\n");
-  // Send CAN Message
-  CAN_frame_t tx_frame;
-  tx_frame.FIR.B.FF = CAN_frame_std;
-  tx_frame.MsgID = MEPB1_ID;
-  tx_frame.FIR.B.DLC = 8;
-
   uint8_t* data = epb_message.U;
 
   data[7] = data[0] ^ data[1] ^ data[2] ^ data[3] ^ data[4] ^ data[5] ^ data[6];
 
-  for (int i=0; i<tx_frame.FIR.B.DLC; i++){
-    tx_frame.data.u8[i] = data[i];
-  }
-
-  if (false) {
-    for (int i=0; i<tx_frame.FIR.B.DLC; i++){
-      Serial.printf("%02x", tx_frame.data.u8[i]);
-    }
-    Serial.printf("\n");
-  }
-
   int ret = 1;
   while(ret){
-    ret = ESP32Can.CANWriteFrame(&tx_frame, 1000);
+    int ret = can_send(MEPB1_ID, epb_message.U, 8, 1000);
   }
 
   epb_message.B.EP1_Zaehler++;
   epb_sent++;
-
 }
 
 void set_warning(bool status){

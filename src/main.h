@@ -2,7 +2,6 @@
 #define MAIN_H
 
 #include <Arduino.h>
-#include <ESP32CAN.h>
 #include "messages.h"
 
 #define LED 2
@@ -20,6 +19,11 @@ extern ACC_System acc_message;
 extern GRA_Neu gra_message;
 
 void log(const char * logline);
+
+void can_init();
+void can_read();
+int can_send(int msg_id, uint8_t* data, int len, int timeout);
+void report_can();
 
 void epb_init();
 void process_epb();

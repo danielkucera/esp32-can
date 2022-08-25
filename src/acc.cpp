@@ -17,30 +17,14 @@ void acc_init() {
 }
 
 void send_acc_status() {
-  // Send CAN Message
-  CAN_frame_t tx_frame;
-  tx_frame.FIR.B.FF = CAN_frame_std;
-  tx_frame.MsgID = 0x368;
-  tx_frame.FIR.B.DLC = 8;
 
   uint8_t* data = acc_message.U;
 
   acc_message.B.ACS_Checksum = data[1] ^ data[2] ^ data[3] ^ data[4] ^ data[5] ^ data[6] ^ data[7];
 
-  for (int i=0; i<tx_frame.FIR.B.DLC; i++){
-    tx_frame.data.u8[i] = data[i];
-  }
-
-  if (false) {
-    for (int i=0; i<tx_frame.FIR.B.DLC; i++){
-      Serial.printf("%02x", tx_frame.data.u8[i]);
-    }
-    Serial.printf("\n");
-  }
-
   int ret = 1;
   while(ret){
-    int ret = ESP32Can.CANWriteFrame(&tx_frame, 1000);
+    int ret = can_send(0x368, acc_message.U, 8, 1000);
   }
 
   acc_message.B.ACS_Zaehler++;
@@ -77,30 +61,14 @@ void report_acc() {
 }
 
 void send_gra() {
-  // Send CAN Message
-  CAN_frame_t tx_frame;
-  tx_frame.FIR.B.FF = CAN_frame_std;
-  tx_frame.MsgID = GRA_NEU_ID;
-  tx_frame.FIR.B.DLC = 4;
-
   uint8_t* data = gra_message.U;
 
+  gra_message.B.GRA_Neu_Zaehler++;
   gra_message.B.GRA_Checksum = data[1] ^ data[2] ^ data[3];
-
-  for (int i=0; i<tx_frame.FIR.B.DLC; i++){
-    tx_frame.data.u8[i] = data[i];
-  }
-
-  if (false) {
-    for (int i=0; i<tx_frame.FIR.B.DLC; i++){
-      Serial.printf("%02x", tx_frame.data.u8[i]);
-    }
-    Serial.printf("\n");
-  }
 
   int ret = 1;
   while(ret){
-    ret = ESP32Can.CANWriteFrame(&tx_frame, 1000);
+    int ret = can_send(GRA_NEU_ID, gra_message.U, 4, 1000);
   }
 }
 
