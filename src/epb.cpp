@@ -35,7 +35,7 @@ void epb_init() {
   // should enable autohold setting in cluster
   // requires coding in gateway (enable epb)
   epb_message.B.EP1_AutoHold_zul = 1;
-  epb_message.B.EP1_AutoHold_active = preferences.getBool("default-enabled", false);
+  epb_message.B.EP1_AutoHold_active = preferences.getBool("default-enabled", true);
 
   //data[4] = 0x21; b0010 0001
   //epb_message.B.EP1_Failureeintr = 1;
@@ -60,8 +60,22 @@ void epb_init() {
     setup_epb_timer();
 }
 
+void report_epb() {
+    printf("epb_sent:%d br_light:%d br_press:%d, br_sta_dru:%d br_dru_val:%d autoh_act:%d autoh_sta:%d epb_sta:%d \n", 
+    epb_sent,
+    abs_message.B.BR5_Bremslicht, 
+    abs_message.B.BR5_Bremsdruck,
+    abs_message.B.BR5_Sta_Druck,
+    abs_message.B.BR5_Druckvalid,
+    abs_message.B.ESP_Autohold_active,
+    abs_message.B.ESP_Autohold_Standby,
+    epb_message.B.EP1_Sta_EPB);
+    epb_sent = 0;
+}
+
 
 void send_epb_status() {
+  //Serial.print("sending epb\n");
   // Send CAN Message
   CAN_frame_t tx_frame;
   tx_frame.FIR.B.FF = CAN_frame_std;

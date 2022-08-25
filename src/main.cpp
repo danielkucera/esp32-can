@@ -22,22 +22,6 @@ void log(const char * logline) {
 
 void report_stats(){
   printf("time:%ld rcvd: %d, txerr:%d rx_overrun:%d ", millis(), msg_count, MODULE_CAN->TXERR.U, ESP32Can.CANOverrunCounter());
-  printf("br_light:%d br_press:%d, br_sta_dru:%d br_dru_val:%d autoh_act:%d autoh_sta:%d epb_sta:%d \n", 
-    abs_message.B.BR5_Bremslicht, 
-    abs_message.B.BR5_Bremsdruck,
-    abs_message.B.BR5_Sta_Druck,
-    abs_message.B.BR5_Druckvalid,
-    abs_message.B.ESP_Autohold_active,
-    abs_message.B.ESP_Autohold_Standby,
-    epb_message.B.EP1_Sta_EPB);
-  printf("Down_kurz:%d Up_kurz:%d, Down_lang:%d Up_lang:%d Recall:%d Neu_Setzen:%d Zeitluecke:%d \n", 
-    gra_message.B.GRA_Down_kurz,
-    gra_message.B.GRA_Up_kurz,
-    gra_message.B.GRA_Down_lang,
-    gra_message.B.GRA_Up_lang,
-    gra_message.B.GRA_Recall,
-    gra_message.B.GRA_Neu_Setzen,
-    gra_message.B.GRA_Zeitluecke);
   msg_count = 0;
 }
 
@@ -217,12 +201,13 @@ void loop() {
     Serial.printf("received %c\n", cmd);
 
     keypress_epb(cmd);
-    keypress_acc(cmd);
+    //keypress_acc(cmd);
   }
 
   if (millis() > last_report + 1000){
     last_report = millis();
     report_stats();
+    report_epb();
   }
 
 }

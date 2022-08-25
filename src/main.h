@@ -24,6 +24,7 @@ void log(const char * logline);
 void epb_init();
 void process_epb();
 bool keypress_epb(char ch);
+void report_epb();
 
 bool keypress_acc(char ch);
 

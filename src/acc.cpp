@@ -65,6 +65,17 @@ void process_acc(){
 */
 }
 
+void report_acc() {
+    printf("Down_kurz:%d Up_kurz:%d, Down_lang:%d Up_lang:%d Recall:%d Neu_Setzen:%d Zeitluecke:%d \n", 
+    gra_message.B.GRA_Down_kurz,
+    gra_message.B.GRA_Up_kurz,
+    gra_message.B.GRA_Down_lang,
+    gra_message.B.GRA_Up_lang,
+    gra_message.B.GRA_Recall,
+    gra_message.B.GRA_Neu_Setzen,
+    gra_message.B.GRA_Zeitluecke);
+}
+
 void send_gra() {
   // Send CAN Message
   CAN_frame_t tx_frame;
@@ -89,18 +100,20 @@ void send_gra() {
 
   int ret = 1;
   while(ret){
-    int ret = ESP32Can.CANWriteFrame(&tx_frame, 1000);
+    ret = ESP32Can.CANWriteFrame(&tx_frame, 1000);
   }
 }
 
 bool keypress_acc(char ch){
     switch (ch){
       case 'm':
+        Serial.printf("zeitlucke 2\n");
         gra_message.B.GRA_Zeitluecke = 2;
         gra_message.B.GRA_Neu_Zaehler += 1;
         send_gra();
         break;
       case 'n':
+        Serial.printf("zeitlucke 1\n");
         gra_message.B.GRA_Zeitluecke = 1;
         gra_message.B.GRA_Neu_Zaehler += 1;
         send_gra();
