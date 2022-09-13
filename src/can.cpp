@@ -20,6 +20,8 @@ int rx_count = 0;
 
 
 void can_init(){
+#if CAN_ENABLE
+
   CAN_cfg.speed = CAN_SPEED_500KBPS;
   CAN_cfg.tx_pin_id = GPIO_NUM_23;
   CAN_cfg.rx_pin_id = GPIO_NUM_22;
@@ -40,6 +42,7 @@ void can_init(){
   ESP32Can.CANConfigFilter(&p_filter);
 
   ESP32Can.CANInit();
+#endif
 }
 
 void report_can(){
@@ -52,6 +55,7 @@ void can_read(){
   unsigned long start = micros();
   int i = 0;
 
+#if CAN_ENABLE
   //printf("bw %ld\n", micros());
 
   while ((i<TCP_MSG_CNT) && (micros() < start + 1000)){
@@ -65,6 +69,7 @@ void can_read(){
       // if gra message, copy to gra
       if (rx_frame[i].MsgID == GRA_NEU_ID){
         memcpy(gra_message.U, rx_frame[i].data.u8, 4);
+        notify_gra();
       }
 
       rx_count++;
@@ -86,7 +91,9 @@ void can_read(){
 
   //printf("before write %d\n", to_send);
 
-#if false
+#endif
+
+#if DUMP_TRAFFIC
     unsigned int base64_length = encode_base64((u_char*)(&rx_frame), to_send, base64+1);
     base64[base64_length+1]='\n';
 
@@ -111,16 +118,23 @@ int can_send(int msg_id, uint8_t* data, int len, int timeout){
     }
 
 #if DEBUG_TX_MSG
+    Serial.printf("can send: ");
     for (int i=0; i<len; i++){
         Serial.printf("%02x", tx_frame.data.u8[i]);
     }
     Serial.printf("\n");
 #endif
 
-  int ret = 1;
-  while(ret){
-    ret = ESP32Can.CANWriteFrame(&tx_frame, 1000);
-  }
+    int ret = 0;
+
+#if CAN_ENABLE
+    ret = 1;
+    long start_ms = millis();
+
+    while(ret && (millis() < start_ms + timeout)){
+        ret = ESP32Can.CANWriteFrame(&tx_frame, timeout);
+    }
+#endif
 
   return ret;
 }
