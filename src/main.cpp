@@ -24,7 +24,17 @@ void setup() {
 
 #if IR_ENABLE
   //IR
-  IrReceiver.begin(15, ENABLE_LED_FEEDBACK);
+  IrReceiver.begin(IR_PIN, DISABLE_LED_FEEDBACK);
+#endif
+
+#ifdef IR_VCC
+  pinMode(IR_VCC, OUTPUT);
+  digitalWrite(IR_VCC, 1);
+#endif
+
+#ifdef IR_GND
+  pinMode(IR_GND, OUTPUT);
+  digitalWrite(IR_GND, 0);
 #endif
 
   can_init();
@@ -43,7 +53,7 @@ void loop() {
     uint32_t ir_msg = IrReceiver.decodedIRData.decodedRawData;
     IrReceiver.resume(); // Enable receiving of the next value
 
-    Serial.println(ir_msg, HEX);
+    printf("ir_rcvd 0x%x\n", ir_msg);
     keypress_acc(ir_msg);
   }
 #endif

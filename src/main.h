@@ -20,7 +20,9 @@
 #define DEBUG_TX_MSG 0
 #define DEBUG_RX_MSG 0
 
-#ifndef IR_ENABLE
+#ifdef IR_PIN
+#define IR_ENABLE 1
+#else
 #define IR_ENABLE 0
 #endif
 
