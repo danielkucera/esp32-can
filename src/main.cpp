@@ -31,7 +31,7 @@ void setup() {
   epb_init();
   //acc_init();
 
-  Serial.println("setup finished");
+  printf("setup finished\n");
 }
 
 void loop() {
@@ -55,7 +55,7 @@ void loop() {
 
   if (Serial.available() > 0) {
     int cmd = Serial.read();
-    Serial.printf("received %c\n", cmd);
+    printf("received %c\n", cmd);
 
     keypress_epb(cmd);
     keypress_acc(cmd);
