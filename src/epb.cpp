@@ -179,19 +179,20 @@ void process_epb(){
 
 }
 
-bool keypress_epb(char ch){
-    switch (ch){
-      case 'd':
-        epb_message.B.EP1_Freigabe_Ver = !epb_message.B.EP1_Freigabe_Ver;
-        Serial.printf("EP1_Freigabe_Ver = %d\n", epb_message.B.EP1_Freigabe_Ver);
-        break;
-      case 'w':
-        epb_message.B.EP1_Verzoegerung += 1;
-        Serial.printf("EP1_Verzoegerung = %x\n", epb_message.B.EP1_Verzoegerung);
-        break;
-      case 's':
-        epb_message.B.EP1_Verzoegerung -= 1;
-        Serial.printf("EP1_Verzoegerung = %x\n", epb_message.B.EP1_Verzoegerung);
-        break;
-    }
+bool keypress_epb(uint32_t ch){
+  switch (ch){
+    case 'd':
+      epb_message.B.EP1_Freigabe_Ver = !epb_message.B.EP1_Freigabe_Ver;
+      Serial.printf("EP1_Freigabe_Ver = %d\n", epb_message.B.EP1_Freigabe_Ver);
+      break;
+    case 'w':
+      epb_message.B.EP1_Verzoegerung += 1;
+      Serial.printf("EP1_Verzoegerung = %x\n", epb_message.B.EP1_Verzoegerung);
+      break;
+    case 's':
+      epb_message.B.EP1_Verzoegerung -= 1;
+      Serial.printf("EP1_Verzoegerung = %x\n", epb_message.B.EP1_Verzoegerung);
+      break;
+  }
+  return 0;
 }

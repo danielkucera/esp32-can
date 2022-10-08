@@ -69,19 +69,23 @@ void send_gra() {
   }
 }
 
-bool keypress_acc(char ch){
+bool keypress_acc(uint32_t ch){
     switch (ch){
       case 'm':
-        Serial.printf("zeitlucke 2\n");
-        gra_message.B.GRA_Zeitluecke = 2;
-        gra_message.B.GRA_Neu_Zaehler += 1;
-        send_gra();
+      case 0xA659FF00:
+        Serial.printf("DIST_MINUS\n");
+        override_gra = DIST_MINUS;
+        notify_gra();
+        //override_times = 2;
+        return 1;
         break;
       case 'n':
-        Serial.printf("zeitlucke 1\n");
-        gra_message.B.GRA_Zeitluecke = 1;
-        gra_message.B.GRA_Neu_Zaehler += 1;
-        send_gra();
+      case 0xA956FF00:
+        Serial.printf("DIST_PLUS\n");
+        override_gra = DIST_PLUS;
+        notify_gra();
+        //override_times = 3;
+        return 1;
         break;
     }
 }

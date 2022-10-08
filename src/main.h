@@ -27,9 +27,10 @@ void report_can();
 
 void epb_init();
 void process_epb();
-bool keypress_epb(char ch);
+bool keypress_epb(uint32_t ch);
 void report_epb();
 
-bool keypress_acc(char ch);
+bool keypress_acc(uint32_t ch);
+void notify_gra();
 
 #endif

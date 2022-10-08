@@ -32,7 +32,7 @@ void loop() {
     Serial.printf("received %c\n", cmd);
 
     keypress_epb(cmd);
-    //keypress_acc(cmd);
+    keypress_acc(cmd);
   }
 
   if (millis() > last_report + 1000){
