@@ -120,8 +120,9 @@ void set_epb(bool status){
 
 void process_epb(){
   if (epb_trigger) {
-    epb_trigger = 0;
-    send_epb_status();
+    if (send_epb_status()){
+      epb_trigger = 0;
+    };
   }
 
   static unsigned long last_autohold_activated = 0;
