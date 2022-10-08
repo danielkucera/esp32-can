@@ -13,6 +13,17 @@
 #define OFF false
 #define ON true
 
+#ifndef CAN_ENABLE
+#define CAN_ENABLE 1
+#endif
+
+#define DEBUG_TX_MSG 0
+#define DEBUG_RX_MSG 0
+
+#ifndef IR_ENABLE
+#define IR_ENABLE 0
+#endif
+
 extern Bremse_5 abs_message;
 extern mEPB_1 epb_message;
 extern ACC_System acc_message;
