@@ -74,18 +74,21 @@ void report_epb() {
 }
 
 
-void send_epb_status() {
+bool send_epb_status() {
   uint8_t* data = epb_message.U;
 
   data[7] = data[0] ^ data[1] ^ data[2] ^ data[3] ^ data[4] ^ data[5] ^ data[6];
 
-  int ret = 1;
-  while(ret){
-    int ret = can_send(MEPB1_ID, epb_message.U, 8, 1000);
+  int ret = can_send(MEPB1_ID, epb_message.U, 8, 3000);
+
+  if (ret){
+    printf("send epb result %d\n", ret);
+    return false;
   }
 
   epb_message.B.EP1_Zaehler++;
   epb_sent++;
+  return true;
 }
 
 void set_warning(bool status){

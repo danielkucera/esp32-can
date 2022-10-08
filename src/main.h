@@ -22,7 +22,7 @@ void log(const char * logline);
 
 void can_init();
 void can_read();
-int can_send(int msg_id, uint8_t* data, int len, int timeout);
+int can_send(int msg_id, uint8_t* data, int len, unsigned long timeout);
 void report_can();
 
 void epb_init();

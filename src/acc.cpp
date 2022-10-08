@@ -22,10 +22,7 @@ void send_acc_status() {
 
   acc_message.B.ACS_Checksum = data[1] ^ data[2] ^ data[3] ^ data[4] ^ data[5] ^ data[6] ^ data[7];
 
-  int ret = 1;
-  while(ret){
-    int ret = can_send(0x368, acc_message.U, 8, 1000);
-  }
+  int ret = can_send(0x368, acc_message.U, 8, 0);
 
   acc_message.B.ACS_Zaehler++;
 
