@@ -26,6 +26,18 @@
 #define IR_ENABLE 0
 #endif
 
+#define BTN_VOL_PLUS    0xB04FFF00
+#define BTN_VOL_MINUS   0xAA55FF00
+#define BTN_LEFT        0xA956FF00
+#define BTN_RIGHT       0xA659FF00
+#define BTN_SEL         0xA857FF00
+#define BTN_MOD         0xAB54FF00
+#define BTN_MENU        0xAC53FF00
+#define BTN_BND         0xA45BFF00
+#define BTN_HANGUP      0xA05FFF00
+#define BTN_PICKUP      0xAE51FF00
+#define BTN_MUTE        0xBE41FF00
+
 extern Bremse_5 abs_message;
 extern mEPB_1 epb_message;
 extern ACC_System acc_message;
