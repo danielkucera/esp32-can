@@ -122,7 +122,7 @@ void notify_gra(){
 
 int set_override(int value){
   override_gra = value;
-  override_times = 6;
+  override_times = 4; // 2 - too few, 3 - ok, 6 - log min
   return 1;
 }
 

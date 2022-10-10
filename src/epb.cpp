@@ -79,7 +79,7 @@ bool send_epb_status() {
 
   data[7] = data[0] ^ data[1] ^ data[2] ^ data[3] ^ data[4] ^ data[5] ^ data[6];
 
-  int ret = can_send(MEPB1_ID, epb_message.U, 8, 3000);
+  int ret = can_send(MEPB1_ID, epb_message.U, 8, 200);
 
   if (ret){
     printf("send epb result %d\n", ret);
